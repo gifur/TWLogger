@@ -1,3 +1,4 @@
+
 /* ---------------------------------------------------------------------------------- *
 *
 * Copyright (c) 2017 Josephus <guifaliao@gmail.com>
@@ -35,6 +36,12 @@
 
 typedef unsigned CounterType;
 typedef unsigned count_type;
+
+#ifndef _DEBUG
+#define _tprintf(fmt, ...)  
+#define printf(fmt, ...)
+#endif // _DEBUG
+
 
 template<class T>
 class TSmartPointer

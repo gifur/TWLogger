@@ -1,27 +1,3 @@
-/* ---------------------------------------------------------------------------------- *
- *
- * Copyright (c) 2017 Josephus <guifaliao@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this
- * software and associated documentation files(the "Software"), to deal in the Software 
- * without restriction, including without limitation the rights to use, copy, modify, 
- * merge, publish, distribute, sublicense, and / or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to the following
- * conditions :
- *
- * The above copyright notice and this permission notice shall be included in 
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
- * PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
- * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
- * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * --------------------------------------------------------------------------------- */
-
-
 
 #include "stdafx.h"
 #include "TWLogger.h"
@@ -36,10 +12,26 @@ tstring CTWLogger::m_strLogDirOrFilePath = DEFAULT_LOG_DIR;
 CTWLogger::CAutoWriteHelper CTWLogger::helper;
 #endif
 
+tstring GetRandomString()
+{
+#define RANDOM_LENGTH 24
+	time_t ts;
+	int ranNum;
+	TCHAR szRandom[RANDOM_LENGTH+1];
+	srand(static_cast<unsigned int>(time(&ts)));
+	for (auto i = 0; i < RANDOM_LENGTH; ++i) {
+		ranNum = rand();
+		szRandom[i] = TLOG_TEXT('A') + ranNum % 25;
+	}
+	szRandom[RANDOM_LENGTH] = '\0';
+	return tstring(szRandom);
+}
+
 #if !(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 
 CTWLogger::CTWLogger(void)
 	:m_bWriteRealTime(true),
+	m_bCreateConsole(false),
 	m_fileName(DEFAULT_LOG_NAME),
 	m_usWriteStatus(LEVEL_OVERALL_WRITEABLE),
 	m_bufCurLen(0),
@@ -49,55 +41,70 @@ CTWLogger::CTWLogger(void)
 	QueryPerformanceFrequency(&m_liPerfFreq);
 	m_strBuffer = TLOG_TEXT("");
 	SetFileWriteMode(Day_Seperated_Mode);
-	hMutexForBuffer = CreateMutex(NULL, FALSE, LPCTSTR("iGobalBuffer"));
+	tstring strMark(TLOG_TEXT("TWMutex-"));
+	hMutexForBuffer = CreateMutex(NULL, FALSE, tstring(strMark + GetRandomString()).c_str());
 	if(!m_bWriteRealTime)
 	{
-		hEventWrite = CreateEvent(NULL, TRUE, FALSE, TLOG_TEXT("iGobalTimerWriteEvent"));
+		tstring strMarkEvt(TLOG_TEXT("TWEvent-"));
+		hEventWrite = CreateEvent(NULL, TRUE, FALSE, tstring(strMarkEvt + GetRandomString()).c_str());
 	}
 }
 
 #else
 
 CTWLogger::CTWLogger(void)
-	:m_name(nullptr),
-	m_bWriteRealTime(true),
-	m_fileName(nullptr),
+	:m_fileName(nullptr),
 	m_usWriteStatus(LEVEL_NONE_WRITEABLE),
 	m_bufCurLen(0),
 	hMutexForBuffer(NULL),
-	hEventWrite(NULL)
+	hEventWrite(NULL),
+	m_bWriteRealTime(true),
+	m_bCreateConsole(false),
+	m_instanceName(nullptr)
 {
 	QueryPerformanceFrequency(&m_liPerfFreq);
 	m_strBuffer = TLOG_TEXT("");
 	SetFileWriteMode(Day_Seperated_Mode);
-	hMutexForBuffer = CreateMutex(NULL, FALSE, LPCTSTR("iGobalBuffer"));
+	tstring strMark(TLOG_TEXT("TWMutex-"));
+	hMutexForBuffer = CreateMutex(NULL, FALSE, tstring(strMark + GetRandomString()).c_str());
 	if(!m_bWriteRealTime)
 	{
-		hEventWrite = CreateEvent(NULL, TRUE, FALSE, TLOG_TEXT("iGobalTimerWriteEvent"));
+		tstring strMarkEvt(TLOG_TEXT("TWEvent-"));
+		hEventWrite = CreateEvent(NULL, TRUE, FALSE, tstring(strMarkEvt + GetRandomString()).c_str());
 	}
 }
 
 CTWLogger::CTWLogger(const tstring& name, const tchar* lpszLogSummaryDir)
-	:m_name(name),
-	m_bWriteRealTime(true),
-	m_fileName(name),
+	:m_fileName(name),
 	m_usWriteStatus(LEVEL_OVERALL_WRITEABLE),
 	m_bufCurLen(0),
 	hMutexForBuffer(NULL),
-	hEventWrite(NULL)
+	hEventWrite(NULL),
+	m_bWriteRealTime(true),
+	m_bCreateConsole(false),
+	m_instanceName(name)
 {
 	InitializeCriticalSection(&s_cs);
 	QueryPerformanceFrequency(&m_liPerfFreq);
 	m_strBuffer = TLOG_TEXT("");
 	SetFileWriteMode(Module_Seperated_Mode, lpszLogSummaryDir);
 	tstring mtxName(name);
-	mtxName += TLOG_TEXT("iGobalBuffer");
-	hMutexForBuffer = CreateMutex(NULL, FALSE, mtxName.c_str());
-	if(!m_bWriteRealTime) {
-		mtxName = name + TLOG_TEXT("TimerWriteEvent");
-		hEventWrite = CreateEvent(NULL, TRUE, FALSE, mtxName.c_str());
+	//mtxName += TLOG_TEXT("iGobalBuffer");
+	//hMutexForBuffer = CreateMutex(NULL, FALSE, mtxName.c_str());
+	//if(!m_bWriteRealTime) {
+	//	mtxName = name + TLOG_TEXT("TimerWriteEvent");
+	//	hEventWrite = CreateEvent(NULL, TRUE, FALSE, mtxName.c_str());
+	//}
+	tstring strMark(TLOG_TEXT("TWMutex-"));
+	strMark += mtxName;
+	hMutexForBuffer = CreateMutex(NULL, FALSE, tstring(strMark + GetRandomString()).c_str());
+	if (!m_bWriteRealTime) {
+		tstring strMarkEvt(TLOG_TEXT("TWEvent-"));
+		strMarkEvt += mtxName;
+		hEventWrite = CreateEvent(NULL, TRUE, FALSE, tstring(strMarkEvt + GetRandomString()).c_str());
 	}
-	_tprintf(TLOG_TEXT("-------------------------CTWLogger::Contrustor: %s: \n"), m_name.c_str());
+
+	_tprintf(TLOG_TEXT("-------------------------CTWLogger::Contrustor: %s: \n"), m_instanceName.c_str());
 }
 
 #endif
@@ -134,6 +141,10 @@ CTWLogger::~CTWLogger(void)
 	//TODO: Bug thirsty to fix !!! -Josephus@2017913 8:29:40
 #if !(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 	//bInitialized = 0;
+	if (m_bCreateConsole) {
+		FreeConsole();
+		m_bCreateConsole = false;
+	}
 #else
 	DeleteCriticalSection(&s_cs);
 #endif
@@ -218,6 +229,20 @@ void CTWLogger::Trace(tstring strInfo)
 	WaitForSingleObject(hMutexForBuffer, INFINITE);
 	m_strBuffer += strInfo;
 	m_strBuffer += TLOG_TEXT("\r\n");
+
+	if (m_bCreateConsole) {
+#if !(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
+		_ftprintf(stdout, TLOG_TEXT("%s\n"), strInfo.c_str());
+#else
+		tstring strTemp(strInfo);
+		tstring strInstance(TLOG_TEXT("{"));
+		strInstance += GetName();
+		strInstance += TLOG_TEXT("} ");
+		strTemp.insert(strTemp.find_first_of(TLOG_TEXT("] ")) + 2, strInstance);
+		_ftprintf(stdout, TLOG_TEXT("%s\n"), strTemp.c_str());
+#endif
+	}
+
 	if(m_bWriteRealTime || m_strBuffer.length() > MAX_INFOR_LEN)
 	{
 		if(m_eFileMode == Day_Seperated_Mode || m_eFileMode == Module_Seperated_Mode)
@@ -237,6 +262,13 @@ void CTWLogger::Trace(tstring strInfo)
 	}
 	ReleaseMutex(hMutexForBuffer);
 }
+
+void CTWLogger::Console(tstring strInfo) {
+	if (m_bCreateConsole) {
+		_ftprintf(stdout, TLOG_TEXT("%s\n"), strInfo.c_str());
+	}
+}
+
 #if !(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 CTWLogger* CTWLogger::GetInstance()
 {
@@ -364,7 +396,7 @@ void CTWLogger::SetFileWriteMode(FileModeEnum eMode, const tchar* lpszDir)
 	}
 #if (defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 	else if(eMode == Module_Seperated_Mode) {
-		if(m_name.length() <= 0) {
+		if(m_instanceName.length() <= 0) {
 			_tprintf(TLOG_TEXT("module name is invalid.\n"));
 			return;
 		}
@@ -386,7 +418,7 @@ void CTWLogger::SetFileWriteMode(FileModeEnum eMode, const tchar* lpszDir)
 			}
 		}
 		m_strLogDirOrFilePath += TLOG_TEXT("\\");
-		m_strLogDirOrFilePath += m_name;
+		m_strLogDirOrFilePath += m_instanceName;
 #ifndef LAZY_MODEL
 #ifndef UNICODE
 		if(_access(m_strLogDirOrFilePath.c_str(), 0) == -1) {
@@ -471,22 +503,11 @@ void CTWLogger::Trace_format(const tchar* fmt, va_list list_arg)
 {
 	int n;
 	n = _vsctprintf(fmt, list_arg);
-//#ifdef UNICODE
-//	n = _vscwprintf(fmt, list_arg);
-//#else
-//	n = _vscprintf(fmt, list_arg);
-//#endif
-	
 	if(n > 0)
 	{
 		tchar *buf = new tchar[n+1];
 		memset(buf, 0, sizeof(tchar)*(n+1));
 		_vstprintf_s(buf, n+1, fmt, list_arg);
-//#ifdef UNICODE
-//		vswprintf_s(buf, n+1, fmt, list_arg);
-//#else
-//		vsprintf_s(buf, n+1, fmt, list_arg);
-//#endif
 		Trace(tstring(buf));
 		delete buf;
 		buf = NULL;
@@ -639,7 +660,6 @@ DWORD CTWLogger::GetCurExeNameOrPath(tchar* outFilePath, int sizeLen, int fetchK
 
 void CTWLogger::DelayLoop(unsigned long usec)
 {
-	LOG_FUNCTION();
 	LARGE_INTEGER freq, start, now;
 	//返回硬件支持的高精度计数器的每秒钟嘀嗒的次数，零表示硬件不支持，读取失败
 	if (!QueryPerformanceFrequency(&freq))
@@ -718,7 +738,7 @@ int CTWLogger::FormatLastError(tchar* szOutMsg, unsigned int sizeLen, DWORD erro
 		return 0;
 
 	LPVOID lpMsgBuf;
-	if(erroCode == 0)
+	if (erroCode == (DWORD)-1)
 	{
 		erroCode = ::GetLastError();
 	}
@@ -774,8 +794,7 @@ const tchar * _GetFileNameForLog(const tchar *pszFilePath)
 		return TLOG_TEXT("empty");
 
 	const tchar* backlash = _tcsrchr(pszFilePath, (int)(TLOG_TEXT('\\')));
-	if(!backlash)
-	{
+	if(!backlash) {
 		return pszFilePath;
 	}
 	return (backlash+1);
@@ -823,26 +842,26 @@ unsigned int _stdcall CTWLogger::CAutoWriteHelper::TimerWriteProc(void* param)
 
 #else
 
-TWLoggerShell TWLoggerShell::GetInstance(const tstring& name)
+CTWLoggerShell CTWLoggerShell::GetInstance(const tstring& name)
 {
 	return GetLoggerFactory()->GetLoggerProduct(name);
 }
 
-LoggerList TWLoggerShell::GetCurrentLoggers()
+LoggerList CTWLoggerShell::GetCurrentLoggers()
 {
 	LoggerList list;
 	GetLoggerFactory()->InitializeLoggerList(list);
 	return list;
 }
 
-bool TWLoggerShell::Exists(const tstring& name)
+bool CTWLoggerShell::Exists(const tstring& name)
 {
 	return false;
 }
 
-TWLoggerShell TWLoggerShell::GetDefaultLogger()
+CTWLoggerShell CTWLoggerShell::GetDefaultLogger()
 {
-	TWLoggerShell instance;
+	CTWLoggerShell instance;
 	GetLoggerFactory()->InitializeDefaultLogger(instance);
 	return instance;
 }

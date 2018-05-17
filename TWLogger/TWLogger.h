@@ -1,47 +1,35 @@
 
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// @author: Josephus
-// @date: 2016-5-3
-// @version: 1.0.0
-// @edit_history: 
-//	@date:2016-6-26 set option for no buffer or not.
-//	@date:2016-7-2	delete erroCode stored; 
-//					add Trace CTWLogger format; add GetLastError() formatting message;
-//					add LOG_FUNCION() to log function enter and leave event;
-//	@date:2016-7-4	improve the logger time accurating to millisecond;
-//  @date:2016-7-26 change the time-formate depend on file_mode.
-//	@date:2016-7-29 support for unicode characterset.
-//	@date:2016-7-29	write the log buffer into the file for specified time interval.
-//	@date:2016-9-2	add 'TRACE_FUNCTION' to log function with returned value(type: int, dword).
-//  @date:2016-12-2 add header file: <tchar.h>
-//  @date:2017-1-24 add WRITE_ERRCODE_LOG
-//  @date:2017-2-9  add FileModeEnum::CustomDir_DaySplit_Mode
-//  @date:2017-5-2  add WRITE_TRACE_LOG
-//	@date:2017-5-8  add LOG_ASSERT and change WRITE_TRACE_PARAM implemention.
-//  @date:2017-5-18 add LAZY_MODEL definition for avoiding creating LogFiles folder.
-// ----------------------------------------------------------------------------------------------
-// @version: 2.0.0 #date: 2017-6-29
-//	@date:2017-7-12 support creating seperated logger instance representing its own record folder
-//	@date:2017-7-14 fix some bugs
-//  @date:2017-10-11 fix the bugs: the order of declaration for static-type m_strLogDirOrFilePath
-//                   would make the set-operation for m_strLogDirOrFilePath in  declaration routine  
-//                   for CAutoWriteHelper no sense.
-//
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
+/* ---------------------------------------------------------------------------------- *
+*
+* Copyright (c) 2017 Josephus <guifaliao@gmail.com>
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy of this
+* software and associated documentation files(the "Software"), to deal in the Software
+* without restriction, including without limitation the rights to use, copy, modify,
+* merge, publish, distribute, sublicense, and / or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to the following
+* conditions :
+*
+* The above copyright notice and this permission notice shall be included in
+* all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+* INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+* PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+* HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+* CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+* OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+* --------------------------------------------------------------------------------- */
 
 #ifndef __TWINKLE_LOGGER_H__
 #define __TWINKLE_LOGGER_H__
 
 #pragma once
 
-#ifndef _DEBUG
-#define _tprintf(fmt, ...)  
-#define printf(fmt, ...)
-#endif // _DEBUG
-#define TWINKLE_LOGGER_VERSION 2
+//#define TWINKLE_LOGGER_VERSION 2
 
+#include "stdafx.h"
 #include <Windows.h>
 #include <fstream>
 #include <string>
@@ -93,6 +81,16 @@ typedef int LogLevel;
 	#include "TWSmartPointer.h"
 #	define GET_LOGGER() (GetLoggerFactory()->GetLoggerProduct(tstring()))
 #	define GET_LOG_INSTANCE(ndc) (GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))
+#   define TWLog_INFO(ndc, fmt, ...) \
+		(GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))->TraceInfor_f(fmt, ##__VA_ARGS__)
+#   define TWLog_DEBUG(ndc, fmt, ...) \
+		(GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))->TraceDebug_f(fmt, ##__VA_ARGS__)
+#   define TWLog_WARN(ndc, fmt, ...) \
+		(GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))->TraceWarning_f(fmt, ##__VA_ARGS__)
+#   define TWLog_ERROR(ndc, fmt, ...) \
+		(GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))->TraceError_f(fmt, ##__VA_ARGS__)
+#   define TWLog_TRACE(ndc, fmt, ...) \
+		(GetLoggerFactory()->GetLoggerProduct(tstring(ndc)))->TraceTrace_f(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, fmt, ##__VA_ARGS__)
 #endif //!(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 
 #ifdef UNICODE
@@ -102,7 +100,7 @@ typedef int LogLevel;
 #	define WRITE_ERROR_LOG (GET_LOGGER()->TraceError)
 #	define WRITE_ERRCODE_LOG (GET_LOGGER()->TraceErrWithLastCode)
 #	define WRITE_TRACE_LOG(str) \
-	GET_LOGGER()->TraceTrace(_GetFileNameForLog(__FILE__), __LINE__, str)
+	GET_LOGGER()->TraceTrace(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, str)
 
 #	define WRITE_INFO_PARAM (GET_LOGGER()->TraceInfor_f)
 #	define WRITE_DEBUG_PARAM (GET_LOGGER()->TraceDebug_f)
@@ -111,18 +109,18 @@ typedef int LogLevel;
 
 #	define WRITE_TRACE_PARAM_INNER_USE (GET_LOGGER()->TraceDefault_f)
 #	define WRITE_TRACE_PARAM(fmt, ...) \
-	GET_LOGGER()->TraceTrace_f(_GetFileNameForLog(__FILE__), __LINE__, fmt, __VA_ARGS__)
+	GET_LOGGER()->TraceTrace_f(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, fmt, __VA_ARGS__)
 
 #ifdef  NDEBUG
 #define _TLOG_ASSERT(expr) \
 	do { if (!expr){ \
-	GET_LOGGER()->TraceAssert(_GetFileNameForLog(__FILE__), __LINE__, \
+	GET_LOGGER()->TraceAssert(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, \
 	L"(\""#expr"\") Under NDEBUG !!!"); \
 	}while(0)
 #else
 #	define _TLOG_ASSERT(expr) \
 	do { if (!expr){ \
-	GET_LOGGER()->TraceAssert(_GetFileNameForLog(__FILE__), __LINE__, L"(\""#expr"\") !!!"); \
+	GET_LOGGER()->TraceAssert(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, L"(\""#expr"\") !!!"); \
 	if(1 == _CrtDbgReport(_CRT_ASSERT, (__FILE__), __LINE__, \
 	NULL, #expr) ) \
 	{_CrtDbgBreak(); \
@@ -140,7 +138,7 @@ typedef int LogLevel;
 #	define WRITE_ERROR_LOG (GET_LOGGER()->TraceError)
 #	define WRITE_ERRCODE_LOG (GET_LOGGER()->TraceErrWithLastCode)
 #	define WRITE_TRACE_LOG(str) \
-	GET_LOGGER()->TraceTrace(_GetFileNameForLog(__FILE__), __LINE__, str)
+	GET_LOGGER()->TraceTrace(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, str)
 
 #	define WRITE_INFO_PARAM (GET_LOGGER()->TraceInfor_f)
 #	define WRITE_DEBUG_PARAM (GET_LOGGER()->TraceDebug_f)
@@ -149,12 +147,12 @@ typedef int LogLevel;
 
 #	define WRITE_TRACE_PARAM_INNER_USE (GET_LOGGER()->TraceDefault_f)
 #	define WRITE_TRACE_PARAM(fmt, ...) \
-	GET_LOGGER()->TraceTrace_f(_GetFileNameForLog(__FILE__), __LINE__, fmt, ##__VA_ARGS__)
+	GET_LOGGER()->TraceTrace_f(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, fmt, ##__VA_ARGS__)
 
 #ifdef  NDEBUG
 #define _TLOG_ASSERT(expr) \
 	do { if (!expr){ \
-	GET_LOGGER()->TraceAssert(_GetFileNameForLog(__FILE__), __LINE__, \
+	GET_LOGGER()->TraceAssert(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, \
 	"(\""#expr"\") Under NDEBUG !!!"); \
 	}while(0)
 #else
@@ -186,6 +184,18 @@ typedef std::string tstring;
 typedef std::stringstream tstringstream;
 typedef char tchar;
 #endif
+
+#	define TwInfo		(GET_LOGGER()->TraceInfor_f)
+#	define TwDbg		(GET_LOGGER()->TraceDebug_f)
+#	define TwWarn		(GET_LOGGER()->TraceWarning_f)
+#	define TwError		(GET_LOGGER()->TraceError_f)
+#	define TwLastErr	(GET_LOGGER()->TraceErrWithLastCode)
+#	define TwTrace(fmt, ...) \
+		GET_LOGGER()->TraceTrace_f(_GetFileNameForLog(TLOG_TEXT(__FILE__)), __LINE__, fmt, ##__VA_ARGS__)
+
+//class CTWLogger;
+
+
 
 const tstring DEFAULT_LOG_DIR = TLOG_TEXT("C:\\");
 const tstring DEFAULT_LOG_NAME = TLOG_TEXT("Log.txt");
@@ -229,10 +239,10 @@ enum
 
 #if (defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 
-class TWLoggerShell;
+class CTWLoggerShell;
 
-typedef std::vector<TWLoggerShell> LoggerList;
-typedef std::map<tstring, TWLoggerShell> LoggerMap;
+typedef std::vector<CTWLoggerShell> LoggerList;
+typedef std::map<tstring, CTWLoggerShell> LoggerMap;
 
 #endif //(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 
@@ -260,8 +270,9 @@ public:
 	static void SetFileWriteMode(FileModeEnum eMode = Day_Seperated_Mode,
 		const tchar* lpszDir = TLOG_TEXT(""));
 #else
-	bool IsEnableLogg() const { return !(m_usWriteStatus == LEVEL_NONE_WRITEABLE); }
-	void SetLogParentDirectory(const tchar* lpszdir);
+	bool IsEnableLogg() const
+	{ return !(m_usWriteStatus == LEVEL_NONE_WRITEABLE); }
+	//void SetLogParentDirectory(const tchar* lpszdir);
 	void SetFileWriteMode(FileModeEnum eMode = Day_Seperated_Mode,
 		const tchar* lpszDir = TLOG_TEXT(""));
 #endif
@@ -289,7 +300,7 @@ public:
 	*@param erroCode: the error code which would be explained. if 0 function would invoke 
 	*GetLastError() Api inner.
 	*/
-	int FormatLastError(tchar* szOutMsg, unsigned int sizeLen, DWORD erroCode = 0);
+	int FormatLastError(tchar* szOutMsg, unsigned int sizeLen, DWORD erroCode = (DWORD)-1);
 	void TraceErrWithLastCode(const tchar* strInfo);
 
 	//Set log file name with inner static value, this function always returned true.
@@ -310,9 +321,31 @@ public:
 		}
 		m_bWriteRealTime = true;
 	}
-
-	HANDLE GetTimerEvent() const
-	{
+	bool EnableConsole(bool bEnable = true) {
+#ifdef _DEBUG
+#if !(defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
+		if (!m_bCreateConsole && bEnable) {
+			if (!AllocConsole())
+				return false;
+			FILE* here = NULL;
+			freopen_s(&here, "CONOUT$", "w", stdout);
+			freopen_s(&here, "CONOUT$", "w", stderr);
+			m_bCreateConsole = true;
+			return true;
+		}
+		if (m_bCreateConsole && !bEnable) {
+			if (!FreeConsole())
+				return false;
+			m_bCreateConsole = false;
+			return true;
+		}
+#else
+		m_bCreateConsole = bEnable;
+#endif
+#endif //DEBUG
+		return true;
+	}
+	HANDLE GetTimerEvent() {
 		if(hEventWrite && hEventWrite != INVALID_HANDLE_VALUE)
 			return hEventWrite;
 		return NULL;
@@ -338,6 +371,7 @@ private:
 	tstring GetCustomTime(DateTypeEnum type = For_Record_Type);
 	tstring GetTimeOfDay();
 	void Trace(tstring strInfo);
+	void Console(tstring strInfo);
 	void Trace_format(const tchar* fmt, va_list list_arg);
 	bool WriteToFile(tstring str);
 	bool ClearToFile();
@@ -352,23 +386,23 @@ private:
 	HANDLE hEventWrite;
 
 	bool m_bWriteRealTime;
-
+	bool m_bCreateConsole;
 
 	LARGE_INTEGER m_liPerfFreq;
 	LARGE_INTEGER m_liPerfStart;
 
 #if (defined(TWINKLE_LOGGER_VERSION) && TWINKLE_LOGGER_VERSION == 2)
 public:
-	tstring GetName() const { return m_name; }
+	tstring GetName() const { return m_instanceName; }
 	CRITICAL_SECTION s_cs;
 private:
 	// Disallow copying of instances of this class
 	CTWLogger(const CTWLogger&);
 	CTWLogger& operator = (const CTWLogger& );
 
-	friend class TWLoggerShell;
+	friend class CTWLoggerShell;
 private:
-	tstring m_name;
+	tstring m_instanceName;
 
 #else
 
@@ -434,49 +468,49 @@ private:
 
 class LoggerFactory;
 
-class TWLoggerShell
+class CTWLoggerShell
 {
 public:
 
-	static TWLoggerShell GetInstance(const tstring& name);
+	static CTWLoggerShell GetInstance(const tstring& name);
 	static LoggerList GetCurrentLoggers();
 	static bool Exists(const tstring& name);
-	static TWLoggerShell GetDefaultLogger();
+	static CTWLoggerShell GetDefaultLogger();
 
-	TWLoggerShell()
+	CTWLoggerShell()
 		:swaddle(nullptr)
 	{}
-	TWLoggerShell(CTWLogger* ptr)
+	CTWLoggerShell(CTWLogger* ptr)
 		:swaddle(ptr)
 	{
 		if (swaddle)
-			_tprintf(TLOG_TEXT("TWLoggerShell::Constructor: %s\n"), swaddle->GetName().c_str());
+			_tprintf(TLOG_TEXT("CTWLoggerShell::Constructor: %s\n"), swaddle->GetName().c_str());
 		if (swaddle)
 			swaddle->AddRef();
 	}
-	TWLoggerShell(const TWLoggerShell& rhs)
+	CTWLoggerShell(const CTWLoggerShell& rhs)
 		: swaddle(rhs.swaddle)
 	{
 		if (swaddle)
-			_tprintf(TLOG_TEXT("TWLoggerShell::Constructor1: %s\n"), swaddle->GetName().c_str());
+			_tprintf(TLOG_TEXT("CTWLoggerShell::Constructor1: %s\n"), swaddle->GetName().c_str());
 		if (swaddle)
 			swaddle->AddRef();
 	}
-	TWLoggerShell & operator = (const TWLoggerShell& rhs)
+	CTWLoggerShell & operator = (const CTWLoggerShell& rhs)
 	{
 		if (swaddle)
-			_tprintf(TLOG_TEXT("TWLoggerShell::Constructor2: %s\n"), swaddle->GetName().c_str());
-		TWLoggerShell(rhs).Swap(*this);
+			_tprintf(TLOG_TEXT("CTWLoggerShell::Constructor2: %s\n"), swaddle->GetName().c_str());
+		CTWLoggerShell(rhs).Swap(*this);
 		return *this;
 	}
-	~TWLoggerShell()
+	~CTWLoggerShell()
 	{
 		if (swaddle)
-			_tprintf(TLOG_TEXT("TWLoggerShell::Destructor: %s\n"), swaddle->GetName().c_str());
+			_tprintf(TLOG_TEXT("CTWLoggerShell::Destructor: %s\n"), swaddle->GetName().c_str());
 		if (swaddle)
 			swaddle->RemoveRef();
 	}
-	void Swap(TWLoggerShell & other)
+	void Swap(CTWLoggerShell & other)
 	{
 		using std::swap;
 		swap(swaddle, other.swaddle);
@@ -518,6 +552,7 @@ class LoggerFactory
 public:
 	LoggerFactory() 
 		:m_strLogDirectory(TLOG_TEXT(""))
+		, m_bConsoleAppend(false)
 	{
 		/*if (!m_defaultLogger.IsFillFlesh())*/ {
 			tchar szExeName[MAX_PATH] = { 0 };
@@ -529,11 +564,16 @@ public:
 			}
 		}
 	}
-	~LoggerFactory() {}
+	~LoggerFactory() {
+		if (m_bConsoleAppend) {
+			FreeConsole();
+			m_bConsoleAppend = false;
+		}
+	}
 
-	TWLoggerShell GetLoggerProduct(const tstring& name)
+	CTWLoggerShell GetLoggerProduct(const tstring& name)
 	{
-		TWLoggerShell logger;
+		CTWLoggerShell logger;
 		LoggerMap::iterator iter;
 		if (name.empty())
 		{
@@ -547,14 +587,15 @@ public:
 		else
 		{
 			logger = CreateNewLoggerInstance(name);
-			//m_ActivedLoggers.insert(std::pair<tstring, TWLoggerShell>);
+			logger->EnableConsole(m_bConsoleAppend);
+			//m_ActivedLoggers.insert(std::pair<tstring, CTWLoggerShell>);
 			std::pair<LoggerMap::iterator, bool> ret = m_ActivedLoggers.insert(make_pair(name, logger));
 		}
 		return logger;
 	}
-	TWLoggerShell CreateNewLoggerInstance(const tstring& name)
+	CTWLoggerShell CreateNewLoggerInstance(const tstring& name)
 	{
-		return TWLoggerShell(new CTWLogger(name, m_strLogDirectory.c_str()));
+		return CTWLoggerShell(new CTWLogger(name, m_strLogDirectory.c_str()));
 	}
 
 	void InitializeLoggerList(LoggerList& list)
@@ -568,7 +609,7 @@ public:
 		}
 	}
 
-	void InitializeDefaultLogger(TWLoggerShell& logger)
+	void InitializeDefaultLogger(CTWLoggerShell& logger)
 	{
 		logger = m_defaultLogger;
 	}
@@ -646,13 +687,43 @@ public:
 		return true;
 	}
 
+	bool EnableConsole(bool bEnable = true) {
+#ifdef _DEBUG
+		bool bUpdate = false;
+		if (!m_bConsoleAppend && bEnable) {
+			if (!AllocConsole())
+				return false;
+			FILE* here = NULL;
+			freopen_s(&here, "CONOUT$", "w", stdout);
+			freopen_s(&here, "CONOUT$", "w", stderr);
+			m_bConsoleAppend = true;
+			bUpdate = true;
+		}
+		else if (m_bConsoleAppend && !bEnable) {
+			if (!FreeConsole())
+				return false;
+			m_bConsoleAppend = false;
+			bUpdate = true;
+		}
+		if (bUpdate) {
+			m_defaultLogger->EnableConsole(bEnable);
+			LoggerMap::iterator iter;
+			for (iter = m_ActivedLoggers.begin(); iter != m_ActivedLoggers.end(); ++iter) {
+				iter->second->EnableConsole(bEnable);
+			}
+		}
+#endif //_DEBUG
+		return true;
+	}
+
 private:
 	LoggerFactory(const LoggerFactory&);
 	LoggerFactory& operator=(const LoggerFactory&);
 
 	LoggerMap m_ActivedLoggers;
-	TWLoggerShell m_defaultLogger;
+	CTWLoggerShell m_defaultLogger;
 
+	bool m_bConsoleAppend;
 	tstring m_strLogDirectory;
 };
 
@@ -676,7 +747,8 @@ namespace TwinkleLib {
 			}
 		}
 		TraceLogger(const tchar* message, const tchar* fileName, int nLine, int* pRet)
-			:m_pszMes(message), m_pszFileN(fileName), m_nLine(nLine), m_pnRet(pRet), m_pDwRet(NULL), m_retType(0)
+			:m_pszMes(message), m_pszFileN(fileName), m_nLine(nLine)
+			, m_pnRet(pRet), m_pDwRet(NULL), m_pfRet(NULL), m_retType(0)
 		{
 			if(GET_LOGGER()->IsEnableLogg())
 			{
@@ -684,13 +756,22 @@ namespace TwinkleLib {
 			}
 		}
 		TraceLogger(const tchar* message, const tchar* fileName, int nLine, PDWORD pRet)
-			:m_pszMes(message), m_pszFileN(fileName), m_nLine(nLine), m_pnRet(NULL), m_pDwRet(pRet), m_retType(1)
+			:m_pszMes(message), m_pszFileN(fileName), m_nLine(nLine)
+			, m_pnRet(NULL), m_pDwRet(pRet), m_pfRet(NULL), m_retType(1)
 		{
 			if(GET_LOGGER()->IsEnableLogg())
 			{
 				WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Enter {%s}, file: {%s}, line: {%d}."), m_pszMes, m_pszFileN, m_nLine);
 			}
 		}
+		//TraceLogger(const tchar* message, const tchar* fileName, int nLine, PBOOL pRet)
+		//	:m_pszMes(message), m_pszFileN(fileName), m_nLine(nLine)
+		//	, m_pnRet(NULL), m_pDwRet(NULL), m_pfRet(pRet), m_retType(2)
+		//{
+		//	if (GET_LOGGER()->IsEnableLogg()) {
+		//		WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Enter {%s}, file: {%s}, line: {%d}."), m_pszMes, m_pszFileN, m_nLine);
+		//	}
+		//}
 		~TraceLogger()
 		{
 			if(GET_LOGGER()->IsEnableLogg())
@@ -705,9 +786,13 @@ namespace TwinkleLib {
 					WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Leave {%s}, file: {%s}, line: {%d}, return: {%u}."), 
 						m_pszMes, m_pszFileN, m_nLine, *m_pDwRet);
 				}
-				else
+				else if (m_retType == 2)
 				{
-					WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Leave {%s}, file: {%s}, line: {%d}."), 
+					WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Leave {%s}, file: {%s}, line: {%d}, return: {%d}."), 
+						m_pszMes, m_pszFileN, m_nLine, *m_pfRet);
+				}
+				else {
+					WRITE_TRACE_PARAM_INNER_USE(TLOG_TEXT("Leave {%s}, file: {%s}, line: {%d}."),
 						m_pszMes, m_pszFileN, m_nLine);
 				}
 			}
@@ -723,6 +808,7 @@ namespace TwinkleLib {
 
 		int* m_pnRet;
 		PDWORD m_pDwRet;
+		BOOL* m_pfRet;
 		int m_retType;
 	};
 
